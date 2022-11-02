@@ -33,4 +33,11 @@ g++ -std=c++0x query.cpp -lspatialindex_c -lspatialindex -o query -L../spatialin
 
 To construct the R-tree packed using PLATON:
 ```
+./bulk_loading ./data/data_rect_0_0.001_1000000 ./tree/tree_rect_0_0.001_1000000_aspect_0.01_0.001_10000_greedy 125 0.8 tgs ../learned-packing/cut_list/mcts_rect_0_0.001_1000000_aspect_0.01_0.001_10000_greedy
 ```
+
+To test the packed R-tree on the test dataset:
+```
+./query ./data/query_aspect_0.01_0.001_test_10000 ./tree/tree_rect_0_0.001_1000000_aspect_0.01_0.001_10000_greedy intersection > res
+```
+
