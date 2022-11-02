@@ -1,6 +1,7 @@
 # PLATON
 
 We have provided an rectangle dataset and a training query set under [`./learned-packing/data`](./learned-packing/data)
+
 To pack R-tree through PLATON-Greedy:
 ```
 cd learned-packing
