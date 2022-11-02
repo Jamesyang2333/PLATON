@@ -10,7 +10,6 @@ python greedy.py
 
 To pack R-tree through PLATON:
 ```
-cd learned-packing
 python mcts-pack.py
 ```
 
@@ -25,9 +24,7 @@ To compile the R-tree program:
 ```
 cd rtree
 g++ -std=c++0x bulk_loading.cpp -lspatialindex_c -lspatialindex -o bulk_loading -L../spatialindex-src-1.9.3/bin -I../spatialindex-src-1.9.3/include
- 
 g++ -std=c++0x tree_load.cpp -lspatialindex_c -lspatialindex -o tree_load -L../spatialindex-src-1.9.3/bin -I../spatialindex-src-1.9.3/include
-
 g++ -std=c++0x query.cpp -lspatialindex_c -lspatialindex -o query -L../spatialindex-src-1.9.3/bin -I../spatialindex-src-1.9.3/include
 ```
 
