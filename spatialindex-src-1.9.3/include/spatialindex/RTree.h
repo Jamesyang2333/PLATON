@@ -40,7 +40,9 @@ namespace SpatialIndex
 
 		enum BulkLoadMethod
 		{
-			BLM_STR = 0x0
+			BLM_STR = 0x0,
+			BLM_TGS = 0x1,
+			BLM_CUSTOM = 0X2
 		};
 
 		enum PersistenObjectIdentifier
@@ -96,12 +98,32 @@ namespace SpatialIndex
 			RTreeVariant rv,
 			id_type& indexIdentifier
 		);
+		SIDX_DLL ISpatialIndex* createAndBulkLoadNewRTreeLearned(
+			BulkLoadMethod m,
+			IDataStream& stream,
+			IStorageManager& sm,
+			double fillFactor,
+			uint32_t indexCapacity,
+			uint32_t leafCapacity,
+			uint32_t dimension,
+			RTreeVariant rv,
+			id_type& indexIdentifier,
+			std::string cutList
+		);
 		SIDX_DLL ISpatialIndex* createAndBulkLoadNewRTree(
 			BulkLoadMethod m,
 			IDataStream& stream,
 			IStorageManager& sm,
 			Tools::PropertySet& ps,
 			id_type& indexIdentifier
+		);
+		SIDX_DLL ISpatialIndex* createAndBulkLoadNewRTreeLearned(
+			BulkLoadMethod m,
+			IDataStream& stream,
+			IStorageManager& sm,
+			Tools::PropertySet& ps,
+			id_type& indexIdentifier,
+			std::string cutList
 		);
 		SIDX_DLL ISpatialIndex* loadRTree(IStorageManager& in, id_type indexIdentifier);
 	}
