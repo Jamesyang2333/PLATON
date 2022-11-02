@@ -43,10 +43,10 @@ RM = /usr/bin/cmake -E remove -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = /home/jingyi2/platon/spatialindex-src-1.9.3
+CMAKE_SOURCE_DIR = /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = /home/jingyi2/platon/spatialindex-src-1.9.3
+CMAKE_BINARY_DIR = /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3
 
 # Utility rule file for dist.
 
@@ -71,6 +71,6 @@ CMakeFiles/dist.dir/clean:
 .PHONY : CMakeFiles/dist.dir/clean
 
 CMakeFiles/dist.dir/depend:
-	cd /home/jingyi2/platon/spatialindex-src-1.9.3 && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home/jingyi2/platon/spatialindex-src-1.9.3 /home/jingyi2/platon/spatialindex-src-1.9.3 /home/jingyi2/platon/spatialindex-src-1.9.3 /home/jingyi2/platon/spatialindex-src-1.9.3 /home/jingyi2/platon/spatialindex-src-1.9.3/CMakeFiles/dist.dir/DependInfo.cmake --color=$(COLOR)
+	cd /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3 && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3 /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3 /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3 /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3 /home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3/CMakeFiles/dist.dir/DependInfo.cmake --color=$(COLOR)
 .PHONY : CMakeFiles/dist.dir/depend
 

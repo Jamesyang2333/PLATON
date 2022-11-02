@@ -6,5 +6,5 @@ CXX_FLAGS = -O2 -g -DNDEBUG -fPIC   -std=gnu++11
 
 CXX_DEFINES = -DHAVE_BCOPY=1 -DHAVE_GETTIMEOFDAY=1 -DHAVE_MEMCPY=1 -DHAVE_MEMSET=1 -DHAVE_SRAND48=1 -Dspatialindex_EXPORTS
 
-CXX_INCLUDES = -I/home/jingyi2/platon/spatialindex-src-1.9.3/src/../include 
+CXX_INCLUDES = -I/home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3/src/../include 
 

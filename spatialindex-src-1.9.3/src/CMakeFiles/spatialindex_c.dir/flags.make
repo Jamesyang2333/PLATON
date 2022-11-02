@@ -6,5 +6,5 @@ CXX_FLAGS = -O2 -g -DNDEBUG -fPIC   -std=gnu++11
 
 CXX_DEFINES = -Dspatialindex_c_EXPORTS
 
-CXX_INCLUDES = -I/home/jingyi2/platon/spatialindex-src-1.9.3/src/../include 
+CXX_INCLUDES = -I/home_nfs/jingyi/rtree-packing/PLATON/spatialindex-src-1.9.3/src/../include 
 

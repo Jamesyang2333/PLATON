@@ -28,6 +28,9 @@
 #include <cstring>
 #include <cstdio>
 #include <cmath>
+#include <queue>
+#include <iostream>
+#include <fstream>
 
 #ifndef _MSC_VER
 #include <unistd.h>
@@ -61,8 +64,10 @@ ExternalSorter::Record::~Record()
 
 bool ExternalSorter::Record::operator<(const Record& r) const
 {
-	if (m_s != r.m_s)
+	if (m_s != r.m_s){
+		std::cout << m_s << " " << r.m_s << "\n";
 		throw Tools::IllegalStateException("ExternalSorter::Record::operator<: Incompatible sorting dimensions.");
+	}
 
 	if (m_r.m_pHigh[m_s] + m_r.m_pLow[m_s] < r.m_r.m_pHigh[m_s] + r.m_r.m_pLow[m_s])
 		return true;
@@ -163,6 +168,8 @@ void ExternalSorter::sort()
 		m_bInsertionPhase = false;
 		return;
 	}
+
+	std::cout << "performing external sort...\n";
 
 	if (m_buffer.size() > 0)
 	{
@@ -337,7 +344,8 @@ void BulkLoader::bulkLoadUsingSTR(
 	std::cerr << "RTree::BulkLoader: Sorting data." << std::endl;
 	#endif
 
-    std::shared_ptr<ExternalSorter> es = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+    // std::shared_ptr<ExternalSorter> es = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> es = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
 
 	while (stream.hasNext())
 	{
@@ -347,13 +355,18 @@ void BulkLoader::bulkLoadUsingSTR(
 				"bulkLoadUsingSTR: RTree bulk load expects SpatialIndex::RTree::Data entries."
 			);
 
-		es->insert(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		// es->insert(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		es->push_back(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
 		d->m_pData = nullptr;
 		delete d;
 	}
-	es->sort();
+	// es->sort();
+	std::sort(es->begin(), es->end(), ExternalSorter::Record::SortAscending());
 
-	pTree->m_stats.m_u64Data = es->getTotalEntries();
+	// pTree->m_stats.m_u64Data = es->getTotalEntries();
+	pTree->m_stats.m_u64Data = es->size();
+
+	// std::cout << "finished initial sorting...\n";
 
 	// create index levels.
 	uint32_t level = 0;
@@ -366,12 +379,17 @@ void BulkLoader::bulkLoadUsingSTR(
 
 		pTree->m_stats.m_nodesInLevel.push_back(0);
 
-        std::shared_ptr<ExternalSorter> es2 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+        // std::shared_ptr<ExternalSorter> es2 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+		std::shared_ptr<std::vector<ExternalSorter::Record*>> es2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+		// std::cout << "start creating level " << level+1 << "...\n";
 		createLevel(pTree, es, 0, bleaf, bindex, level++, es2, pageSize, numberOfPages);
+		// std::cout << "finished creating level " << level+1 << "...\n";
 		es = es2;
 
-		if (es->getTotalEntries() == 1) break;
-		es->sort();
+		// if (es->getTotalEntries() == 1) break;
+		if (es->size() == 1) break;
+		// es->sort();
+		std::sort(es->begin(), es->end(), ExternalSorter::Record::SortAscending());
 	}
 
 	pTree->m_stats.m_u32TreeHeight = level;
@@ -380,27 +398,39 @@ void BulkLoader::bulkLoadUsingSTR(
 
 void BulkLoader::createLevel(
 	SpatialIndex::RTree::RTree* pTree,
-	std::shared_ptr<ExternalSorter> es,
+	// std::shared_ptr<ExternalSorter> es,
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> es,
 	uint32_t dimension,
 	uint32_t bleaf,
 	uint32_t bindex,
 	uint32_t level,
-	std::shared_ptr<ExternalSorter> es2,
+	// std::shared_ptr<ExternalSorter> es2,
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> es2,
 	uint32_t pageSize,
 	uint32_t numberOfPages
 ) {
 	uint64_t b = (level == 0) ? bleaf : bindex;
-	uint64_t P = static_cast<uint64_t>(std::ceil(static_cast<double>(es->getTotalEntries()) / static_cast<double>(b)));
+	// uint64_t P = static_cast<uint64_t>(std::ceil(static_cast<double>(es->getTotalEntries()) / static_cast<double>(b)));
+	uint64_t P = static_cast<uint64_t>(std::ceil(static_cast<double>(es->size()) / static_cast<double>(b)));
 	uint64_t S = static_cast<uint64_t>(std::ceil(std::sqrt(static_cast<double>(P))));
 
-	if (S == 1 || dimension == pTree->m_dimension - 1 || S * b == es->getTotalEntries())
+	// if (S == 1 || dimension == pTree->m_dimension - 1 || S * b == es->getTotalEntries())
+	// if (S == 1 || dimension == pTree->m_dimension - 1 || S * b == es->size())
+	if (S == 1 || dimension == pTree->m_dimension - 1)
 	{
+		// std::cout << "dimension: " << dimension << ", write nodes to disk\n";
 		std::vector<ExternalSorter::Record*> node;
 		ExternalSorter::Record* r;
 
+		uint64_t count = 0;
 		while (true)
 		{
-			try { r = es->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+			// try { r = es->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+			if (count == es->size()){
+				break;
+			}
+			r = (*es)[count];
+			count++;
 			node.push_back(r);
 
 			if (node.size() == b)
@@ -408,7 +438,8 @@ void BulkLoader::createLevel(
 				Node* n = createNode(pTree, node, level);
 				node.clear();
 				pTree->writeNode(n);
-				es2->insert(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+				// es2->insert(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+				es2->push_back(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
 				pTree->m_rootID = n->m_identifier;
 					// special case when the root has exactly bindex entries.
 				delete n;
@@ -419,30 +450,89 @@ void BulkLoader::createLevel(
 		{
 			Node* n = createNode(pTree, node, level);
 			pTree->writeNode(n);
-			es2->insert(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+			// es2->insert(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+			es2->push_back(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
 			pTree->m_rootID = n->m_identifier;
 			delete n;
 		}
 	}
 	else
 	{
+		// std::cout << "dimension: " << dimension << ", sorting data by another dimension\n";
 		bool bMore = true;
+		uint64_t count = 0;
 
 		while (bMore)
 		{
 			ExternalSorter::Record* pR;
-            std::shared_ptr<ExternalSorter> es3 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+            // std::shared_ptr<ExternalSorter> es3 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> es3 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
 
-			for (uint64_t i = 0; i < S * b; ++i)
-			{
-				try { pR = es->getNextRecord(); }
-				catch (Tools::EndOfStreamException&) { bMore = false; break; }
+			// for (uint64_t i = 0; i < S * b; ++i)
+			// {
+			// 	try { pR = es->getNextRecord(); }
+			// 	catch (Tools::EndOfStreamException&) { bMore = false; break; }
+			// 	pR->m_s = dimension + 1;
+			// 	es3->insert(pR);
+			// }
+			for (int i = 0; i < S * b; ++i) {
+				if (count == es->size()){
+					bMore = false;
+					break;
+				}
+				pR = (*es)[count];
+				count++;
 				pR->m_s = dimension + 1;
-				es3->insert(pR);
+				es3->push_back(pR);
 			}
-			es3->sort();
+			// es3->sort();
+			std::sort(es3->begin(), es3->end(), ExternalSorter::Record::SortAscending());
 			createLevel(pTree, es3, dimension + 1, bleaf, bindex, level, es2, pageSize, numberOfPages);
 		}
+	}
+}
+
+void BulkLoader::createLevelTGS(
+	SpatialIndex::RTree::RTree* pTree,
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords,
+	uint32_t dimension,
+	uint32_t bleaf,
+	uint32_t bindex,
+	uint32_t level,
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2,
+	uint32_t pageSize,
+	uint32_t numberOfPages
+) {
+	uint64_t b = (level == 0) ? bleaf : bindex;
+	uint64_t P = static_cast<uint64_t>(std::ceil(static_cast<double>(orderedRecords->size() / static_cast<double>(b))));
+
+	std::vector<ExternalSorter::Record*> node;
+	ExternalSorter::Record* r;
+
+	for (int i = 0; i < orderedRecords->size(); i++)
+	{
+		node.push_back((*orderedRecords)[i]);
+
+		if (node.size() == b)
+		{
+			Node* n = createNode(pTree, node, level);
+			node.clear();
+			pTree->writeNode(n);
+			orderedRecords2->push_back(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+			pTree->m_rootID = n->m_identifier;
+				// special case when the root has exactly bindex entries.
+			delete n;
+		}
+	}
+
+	if (! node.empty())
+	{
+		std::cout << node.size() << " records remains, put remaining records in one block\n";
+		Node* n = createNode(pTree, node, level);
+		pTree->writeNode(n);
+		orderedRecords2->push_back(new ExternalSorter::Record(n->m_nodeMBR, n->m_identifier, 0, nullptr, 0));
+		pTree->m_rootID = n->m_identifier;
+		delete n;
 	}
 }
 
@@ -461,4 +551,304 @@ Node* BulkLoader::createNode(SpatialIndex::RTree::RTree* pTree, std::vector<Exte
 	}
 
 	return n;
+}
+
+// bool BulkLoader::compareRecord(ExternalSorter::Record* a, ExternalSorter::Record* b) {
+// 	return (*a < *b);
+// }
+
+//
+// PartitionState
+//
+PartitionState::PartitionState(std::shared_ptr<std::vector<ExternalSorter::Record*>> es, uint32_t level)
+: es(es), level(level)
+{
+}
+
+PartitionState::~PartitionState()
+{
+	es = nullptr;
+}
+
+void BulkLoader::bulkLoadUsingTGS(
+	SpatialIndex::RTree::RTree* pTree,
+	IDataStream& stream,
+	uint32_t bindex,
+	uint32_t bleaf,
+	uint32_t pageSize,
+	uint32_t numberOfPages,
+	std::string cutListFile
+) {
+	std::vector<std::pair<int, int>> cutList;
+	int dim, pos;
+	std::ifstream readFile(cutListFile);
+	while (readFile >> dim >> pos) {
+		cutList.push_back(std::make_pair(dim, pos));
+	}
+
+
+	if (! stream.hasNext())
+		throw Tools::IllegalArgumentException(
+			"RTree::BulkLoader::bulkLoadUsingTGS: Empty data stream given."
+		);
+
+	NodePtr n = pTree->readNode(pTree->m_rootID);
+	pTree->deleteNode(n.get());
+
+	#ifndef NDEBUG
+	std::cerr << "RTree::BulkLoader: Sorting data." << std::endl;
+	#endif
+
+    // std::shared_ptr<ExternalSorter> es = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> es = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+
+	std::cout << "Start loading data...\n";
+
+	while (stream.hasNext())
+	{
+		Data* d = reinterpret_cast<Data*>(stream.getNext());
+		if (d == nullptr)
+			throw Tools::IllegalArgumentException(
+				"bulkLoadUsingTGS: RTree bulk load expects SpatialIndex::RTree::Data entries."
+			);
+
+		// es->insert(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		es->push_back(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		d->m_pData = nullptr;
+		delete d;
+	}
+	// es->sort();
+	std::sort(es->begin(), es->end(), ExternalSorter::Record::SortAscending());
+
+	// pTree->m_stats.m_u64Data = es->getTotalEntries();
+	pTree->m_stats.m_u64Data = es->size();
+
+	// std::cout << es->getTotalEntries() << " Data loaded\n";
+	std::cout << es->size() << " Data loaded\n";
+
+	std::queue<PartitionState*> q;
+
+	// uint32_t totalLevel = std::ceil(log(static_cast<double>(es->getTotalEntries()) / static_cast<double>(bleaf)) / log(static_cast<double>(bindex)));
+	uint32_t totalLevel = std::ceil(log(static_cast<double>(es->size()) / static_cast<double>(bleaf)) / log(static_cast<double>(bindex)));
+
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+	
+	int cutCount = 0;
+	q.push(new PartitionState(es, totalLevel));
+	while (!q.empty()) {
+		PartitionState* currentState = q.front();
+		q.pop();
+		// std::vector<std::shared_ptr<ExternalSorter>> partitionList;
+		std::vector<std::shared_ptr<std::vector<ExternalSorter::Record*>>> partitionList;
+		partitionList.push_back(currentState->es);
+		uint32_t currentLevel = currentState->level;
+		uint64_t childSize = bleaf * pow(bindex, currentLevel-1);
+		// uint32_t nChilds = currentState->es->getTotalEntries() / childSize;
+		uint32_t nChilds = ceil(static_cast<double>(currentState->es->size()) / childSize);
+		std::cout << "currentLevel: " << currentLevel << ", childSize: " << childSize << ", nChilds: " << nChilds << "\n";
+		for (int cCut = 0; cCut < nChilds - 1; cCut++){
+			int currentIdx = 0;
+			for (int i = 0; i < partitionList.size(); i++){
+				// if (partitionList[i]->getTotalEntries() > childSize) {
+				if (partitionList[i]->size() > childSize) {
+					currentIdx = i;
+					break;
+				}
+			}
+			// std::cout << "partition index: " << currentIdx << ", size: " << partitionList[currentIdx]->getTotalEntries() << "\n";
+			std::cout << "partition index: " << currentIdx << ", size: " << partitionList[currentIdx]->size() << "\n";
+			// std::shared_ptr<ExternalSorter> currentEs = partitionList[currentIdx];
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> currentEs = partitionList[currentIdx];
+			// uint64_t currentTotalEntries = currentEs->getTotalEntries();
+			uint64_t currentTotalEntries = currentEs->size();
+			ExternalSorter::Record* r;
+			std::pair<int, int> currentCut = cutList[cutCount];
+			cutCount++;
+			int dim = currentCut.first;
+			int pos = currentCut.second;
+			std::cout << "Start sorting by cut dimension: " << dim << " " << pos << "\n";
+			// std::shared_ptr<ExternalSorter> intermediateEs = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> intermediateEs = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+			// for (int i = 0; i < currentTotalEntries; i++){
+			// 	try { r = currentEs->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+			// 	r->m_s = dim;
+			// 	intermediateEs->insert(r);
+			// }
+			for (int i = 0; i < currentTotalEntries; i++) {
+				r = (*currentEs)[i];
+				r->m_s = dim;
+				intermediateEs->push_back(r);
+			}
+			std::sort(intermediateEs->begin(), intermediateEs->end(), ExternalSorter::Record::SortAscending());
+			currentEs = intermediateEs;
+			std::cout << "Sorted by cut dimension: " << dim << " " << pos << "\n";
+			// std::shared_ptr<ExternalSorter> es1 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+			// std::shared_ptr<ExternalSorter> es2 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> es1 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> es2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+			// for (int i = 0; i < pos * childSize; i++) {
+			// 	try { r = currentEs->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+			// 	es1->insert(r);
+			// }
+			// es1->sort();
+			// for (int i = 0; i < currentEs->getTotalEntries() - pos * childSize; i++) {
+			// 	try { r = currentEs->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+			// 	es2->insert(r);
+			// }
+			// es2->sort();
+			for (int i = 0; i < pos * childSize; i++) {
+				r = (*currentEs)[i];
+				es1->push_back(r);
+			}
+			for (int i = pos * childSize; i < currentEs->size(); i++) {
+				r = (*currentEs)[i];
+				es2->push_back(r);
+			}
+			std::vector<std::shared_ptr<std::vector<ExternalSorter::Record*>>>::iterator it;
+			it = partitionList.begin();
+			partitionList.erase(it+currentIdx);
+			partitionList.insert(it+currentIdx, es1);
+			partitionList.insert(it+currentIdx+1, es2);
+			// std::cout << "partitioned into size: " << es1->getTotalEntries() << " " << es2->getTotalEntries() << " \n";
+			std::cout << "partitioned into size: " << es1->size() << " " << es2->size() << " \n";
+		}
+		if (currentState->level == 1) {
+			ExternalSorter::Record* r;
+			for (int i = 0; i < partitionList.size(); i++){
+				// while (true) {
+				// 	try { r = partitionList[i]->getNextRecord(); } catch (Tools::EndOfStreamException&) { break; }
+				// 	orderedRecords->push_back(r);
+				// }
+				for (int j = 0; j < partitionList[i]->size(); j++) {
+					r = (*partitionList[i])[j];
+					orderedRecords->push_back(r);
+				}
+			}
+		}
+		else {
+			for (int i = 0; i < partitionList.size(); i++){
+				q.push(new PartitionState(partitionList[i], currentLevel-1));
+			}
+		}
+	}
+
+	std::cout << "Ordered records in TGS order\n";
+
+	
+
+	// create index levels.
+	uint32_t level = 0;
+
+	while (true)
+	{
+		#ifndef NDEBUG
+		std::cerr << "RTree::BulkLoader: Building level " << level << std::endl;
+		#endif
+		std::cout << "RTree::BulkLoader: Building level " << level << std::endl;
+		std::cout << "Number of records: " << orderedRecords->size() << std::endl;
+		if (level == 2 || level == 3) {
+			for (int i = 0; i < orderedRecords->size(); i++) {
+				std::cout << (*orderedRecords)[i]->m_r << std::endl;
+			}
+		}
+		std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+
+		pTree->m_stats.m_nodesInLevel.push_back(0);
+
+        std::shared_ptr<ExternalSorter> es2 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+		createLevelTGS(pTree, orderedRecords, 0, bleaf, bindex, level++, orderedRecords2, pageSize, numberOfPages);
+		orderedRecords = orderedRecords2;
+
+		if (orderedRecords->size() == 1) break;
+		// es->sort();
+	}
+	std::cout << "Finished building all levels\n";
+
+	pTree->m_stats.m_u32TreeHeight = level;
+	pTree->storeHeader();
+}
+
+void BulkLoader::bulkLoadUsingCustom(
+	SpatialIndex::RTree::RTree* pTree,
+	IDataStream& stream,
+	uint32_t bindex,
+	uint32_t bleaf,
+	uint32_t pageSize,
+	uint32_t numberOfPages
+) {
+
+
+	if (! stream.hasNext())
+		throw Tools::IllegalArgumentException(
+			"RTree::BulkLoader::bulkLoadUsingTGS: Empty data stream given."
+		);
+
+	NodePtr n = pTree->readNode(pTree->m_rootID);
+	pTree->deleteNode(n.get());
+
+	#ifndef NDEBUG
+	std::cerr << "RTree::BulkLoader: Sorting data." << std::endl;
+	#endif
+
+    // std::shared_ptr<ExternalSorter> es = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+
+	std::cout << "Start loading data...\n";
+
+	while (stream.hasNext())
+	{
+		Data* d = reinterpret_cast<Data*>(stream.getNext());
+		if (d == nullptr)
+			throw Tools::IllegalArgumentException(
+				"bulkLoadUsingTGS: RTree bulk load expects SpatialIndex::RTree::Data entries."
+			);
+
+		// es->insert(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		orderedRecords->push_back(new ExternalSorter::Record(d->m_region, d->m_id, d->m_dataLength, d->m_pData, 0));
+		d->m_pData = nullptr;
+		delete d;
+	}
+
+	// pTree->m_stats.m_u64Data = es->getTotalEntries();
+	pTree->m_stats.m_u64Data = orderedRecords->size();
+
+	// std::cout << es->getTotalEntries() << " Data loaded\n";
+	std::cout << orderedRecords->size() << " Data loaded\n";
+
+	// uint32_t totalLevel = std::ceil(log(static_cast<double>(es->getTotalEntries()) / static_cast<double>(bleaf)) / log(static_cast<double>(bindex)));
+	uint32_t totalLevel = std::ceil(log(static_cast<double>(orderedRecords->size()) / static_cast<double>(bleaf)) / log(static_cast<double>(bindex)));
+
+	std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+	
+	// create index levels.
+	uint32_t level = 0;
+
+	while (true)
+	{
+		#ifndef NDEBUG
+		std::cerr << "RTree::BulkLoader: Building level " << level << std::endl;
+		#endif
+		std::cout << "RTree::BulkLoader: Building level " << level << std::endl;
+		std::cout << "Number of records: " << orderedRecords->size() << std::endl;
+		if (level == 2 || level == 3) {
+			for (int i = 0; i < orderedRecords->size(); i++) {
+				std::cout << (*orderedRecords)[i]->m_r << std::endl;
+			}
+		}
+		std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2 = std::shared_ptr<std::vector<ExternalSorter::Record*>>(new std::vector<ExternalSorter::Record*>);
+
+		pTree->m_stats.m_nodesInLevel.push_back(0);
+
+        std::shared_ptr<ExternalSorter> es2 = std::shared_ptr<ExternalSorter>(new ExternalSorter(pageSize, numberOfPages));
+		createLevelTGS(pTree, orderedRecords, 0, bleaf, bindex, level++, orderedRecords2, pageSize, numberOfPages);
+		orderedRecords = orderedRecords2;
+
+		if (orderedRecords->size() == 1) break;
+		// es->sort();
+	}
+	std::cout << "Finished building all levels\n";
+
+	pTree->m_stats.m_u32TreeHeight = level;
+	pTree->storeHeader();
 }

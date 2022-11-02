@@ -115,16 +115,47 @@ namespace SpatialIndex
 				uint32_t pageSize, // The number of node entries per page.
 				uint32_t numberOfPages // The total number of pages to use.
 			);
+			void bulkLoadUsingTGS(
+				RTree* pTree,
+				IDataStream& stream,
+				uint32_t bindex,
+				uint32_t bleaf,
+				uint32_t pageSize, // The number of node entries per page.
+				uint32_t numberOfPages, // The total number of pages to use.
+				std::string cutListFile
+			);
+			void bulkLoadUsingCustom(
+				RTree* pTree,
+				IDataStream& stream,
+				uint32_t bindex,
+				uint32_t bleaf,
+				uint32_t pageSize, // The number of node entries per page.
+				uint32_t numberOfPages // The total number of pages to use.
+			);
 
 		protected:
 			void createLevel(
 				RTree* pTree,
-				std::shared_ptr<ExternalSorter> es,
+				// std::shared_ptr<ExternalSorter> es,
+				std::shared_ptr<std::vector<ExternalSorter::Record*>> es,
 				uint32_t dimension,
 				uint32_t indexSize,
 				uint32_t leafSize,
 				uint32_t level,
-				std::shared_ptr<ExternalSorter> es2,
+				// std::shared_ptr<ExternalSorter> es2,
+				std::shared_ptr<std::vector<ExternalSorter::Record*>> es2,
+				uint32_t pageSize,
+				uint32_t numberOfPages
+			);
+
+			void createLevelTGS(
+				RTree* pTree,
+				std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords,
+				uint32_t dimension,
+				uint32_t indexSize,
+				uint32_t leafSize,
+				uint32_t level,
+				std::shared_ptr<std::vector<ExternalSorter::Record*>> orderedRecords2,
 				uint32_t pageSize,
 				uint32_t numberOfPages
 			);
@@ -134,6 +165,18 @@ namespace SpatialIndex
 				std::vector<ExternalSorter::Record*>& e,
 				uint32_t level
 			);
+
+			// bool BulkLoader::compareRecord(ExternalSorter::Record* a, ExternalSorter::Record* b);
+		};
+
+		class PartitionState
+		{
+		public:
+			PartitionState(std::shared_ptr<std::vector<ExternalSorter::Record*>> es, uint32_t level);
+			virtual ~PartitionState();
+			// std::shared_ptr<ExternalSorter> es;
+			std::shared_ptr<std::vector<ExternalSorter::Record*>> es;
+			uint32_t level;
 		};
 	}
 }
